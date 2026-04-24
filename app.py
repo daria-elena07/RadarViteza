@@ -35,7 +35,6 @@ def init():
         time TEXT
     )""")
 
-    # fake cars
     cars = [
         ('IS-01-ABC','Daria','daria@mail.com','0712345678'),
         ('B-123-AAA','Ion Popescu','ion@mail.com','0722222222'),
@@ -213,6 +212,7 @@ Logged in as {session["user"]} | <a href="/logout">Logout</a>
 <span>
 <a href="/send_email/{plate}"><button>📧</button></a>
 <a href="/add_violation/{plate}"><button>➕</button></a>
+<a href="/clear_violations/{plate}" onclick="return confirm('Clear violations?')"><button>🧹</button></a>
 <a href="/delete/{plate}" onclick="return confirm('Delete?')"><button>🗑</button></a>
 </span>
 </summary>
@@ -240,13 +240,8 @@ Logged in as {session["user"]} | <a href="/logout">Logout</a>
 def add():
     conn = db()
     c = conn.cursor()
-
     c.execute("INSERT OR REPLACE INTO registry VALUES (?,?,?,?)",
-              (request.form["plate"],
-               request.form["owner"],
-               request.form["email"],
-               request.form["phone"]))
-
+              (request.form["plate"],request.form["owner"],request.form["email"],request.form["phone"]))
     conn.commit()
     conn.close()
     return redirect("/")
@@ -267,10 +262,18 @@ def delete(plate):
 def add_v(plate):
     conn = db()
     c = conn.cursor()
-
-    c.execute("INSERT INTO violations (plate,speed,limit_speed,time) VALUES (?,?,?,?)",
+    c.execute("INSERT INTO violations VALUES (NULL,?,?,?,?)",
               (plate,90,60,datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    conn.commit()
+    conn.close()
+    return redirect("/")
 
+# ------------------ CLEAR VIOLATIONS ------------------
+@app.route("/clear_violations/<plate>")
+def clear_v(plate):
+    conn = db()
+    c = conn.cursor()
+    c.execute("DELETE FROM violations WHERE plate=?", (plate,))
     conn.commit()
     conn.close()
     return redirect("/")
@@ -280,33 +283,23 @@ def add_v(plate):
 def mail(plate):
     conn = db()
     c = conn.cursor()
-
     c.execute("SELECT COUNT(*) FROM violations WHERE plate=?", (plate,))
     count = c.fetchone()[0]
-
-    msg = "🚨 Ai amenda!" if count>0 else "✅ Totul bine!"
-
     conn.close()
-
+    msg = "🚨 Ai amenda!" if count>0 else "✅ Totul bine!"
     return f"<h2 style='text-align:center'>{msg}<br>{plate}<br><a href='/'>Back</a></h2>"
 
 # ------------------ EVENT ------------------
 @app.route("/event", methods=["POST"])
 def event():
     data = request.json
-
     conn = db()
     c = conn.cursor()
-
     c.execute("INSERT INTO violations VALUES (NULL,?,?,?,?)",
-              (data["plate"],data["speed"],data["limit"],
-               datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-
+              (data["plate"],data["speed"],data["limit"],datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     c.execute("SELECT * FROM registry WHERE plate=?", (data["plate"],))
     if not c.fetchone():
-        c.execute("INSERT INTO registry VALUES (?,?,?,?)",
-                  (data["plate"],"UNKNOWN","-","-"))
-
+        c.execute("INSERT INTO registry VALUES (?,?,?,?)",(data["plate"],"UNKNOWN","-","-"))
     conn.commit()
     conn.close()
     return {"status":"ok"}
